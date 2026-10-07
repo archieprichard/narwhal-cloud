@@ -1,0 +1,12 @@
+clean_rooms:
+  target:
+    entity:
+      integration: narwal_cloud
+      domain: vacuum
+  fields:
+    rooms:
+      required: true
+      example: ["Kitchen", "Hallway"]
+      selector:
+        text:
+          multiple: true

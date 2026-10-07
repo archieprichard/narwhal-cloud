@@ -1,0 +1,186 @@
+{
+  "entity": {
+    "binary_sensor": {
+      "turbo_mode": {
+        "name": "Turbo mode"
+      }
+    },
+    "camera": {
+      "map": {
+        "name": "Map"
+      },
+      "map_data": {
+        "name": "Map data"
+      }
+    },
+    "sensor": {
+      "battery": {
+        "name": "Battery"
+      },
+      "movement_status": {
+        "name": "Movement status",
+        "state": {
+          "charging": "Charging",
+          "cleaning": "Cleaning",
+          "docked": "Docked",
+          "error": "Error",
+          "idle": "Idle",
+          "paused": "Paused",
+          "returning": "Returning to dock",
+          "station_work": "Working at station"
+        }
+      },
+      "cleaning_status": {
+        "name": "Cleaning mode",
+        "state": {
+          "cleaning": "Cleaning",
+          "error": "Error",
+          "paused": "Paused",
+          "returning": "Returning to dock",
+          "station_work": "Mop washing/drying",
+          "stopped": "Stopped"
+        }
+      },
+      "filter_remaining": {
+        "name": "Filter remaining time"
+      },
+      "mop_remaining": {
+        "name": "Mop remaining time"
+      },
+      "side_brush_remaining": {
+        "name": "Side brush remaining time"
+      },
+      "sponge_remaining": {
+        "name": "Sponge remaining time"
+      },
+      "main_brush_remaining": {
+        "name": "Main brush remaining time"
+      },
+      "current_room": {
+        "name": "Current room"
+      }
+    },
+    "button": {
+      "wash_and_dry_mop": {
+        "name": "Wash and dry mops"
+      },
+      "finish_station": {
+        "name": "Finish mop washing/drying"
+      }
+    },
+    "select": {
+      "cleaning_mode": {
+        "name": "Cleaning mode",
+        "state": {
+          "freo_mind": "Freo Mind",
+          "vacuum": "Vacuum",
+          "mop": "Mop",
+          "vacuum_and_mop": "Vacuum and mop",
+          "vacuum_then_mop": "Vacuum then mop"
+        }
+      },
+      "suction_power": {
+        "name": "Suction power",
+        "state": {
+          "quiet": "Quiet",
+          "standard": "Standard",
+          "strong": "Strong"
+        }
+      },
+      "mop_humidity": {
+        "name": "Mop humidity",
+        "state": {
+          "slightly_dry": "Slightly dry",
+          "standard": "Standard",
+          "slightly_wet": "Slightly wet"
+        }
+      },
+      "cleaning_cycles": {
+        "name": "Cleaning cycles",
+        "state": {
+          "one_time": "1 time",
+          "two_times": "2 times",
+          "three_times": "3 times"
+        }
+      }
+    }
+  },
+  "config": {
+    "step": {
+      "user": {
+        "title": "Connect Narwal Cloud",
+        "menu_options": {
+          "account": "Sign in with a Narwal account (recommended)",
+          "token": "Enter app tokens manually"
+        }
+      },
+      "account": {
+        "title": "Sign in to Narwal Cloud",
+        "description": "Use the email and password registered in the Narwal app. Credentials stay only in your Home Assistant config entry and are never written to integration logs or GitHub.",
+        "data": {
+          "email": "Narwal account email",
+          "password": "Narwal account password"
+        }
+      },
+      "token": {
+        "title": "Connect with app tokens",
+        "description": "Enter the access and refresh tokens extracted from the Narwal app. [How to obtain tokens]({token_guide_url})",
+        "data": {
+          "access_token": "Narwal access token",
+          "refresh_token": "Narwal refresh token"
+        }
+      },
+      "reconfigure": {
+        "title": "Switch to automatic account login",
+        "description": "Enter the Narwal account that owns or has been invited to this robot. This replaces manual token management.",
+        "data": {
+          "email": "Narwal account email",
+          "password": "Narwal account password"
+        }
+      },
+      "reauth_confirm": {
+        "title": "Reconnect Narwal Cloud",
+        "description": "The saved Narwal session could not be renewed. Enter the account credentials again.",
+        "data": {
+          "email": "Narwal account email",
+          "password": "Narwal account password"
+        }
+      }
+    },
+    "error": {
+      "cannot_connect": "Unable to connect to Narwal Cloud. Try again later.",
+      "invalid_auth": "Narwal rejected the email or password.",
+      "device_not_found": "This account cannot access the previously configured robot. Invite this account from the main Narwal account first."
+    },
+    "abort": {
+      "already_configured": "This Narwal robot is already configured.",
+      "no_devices": "No Narwal robot is linked or shared with this account.",
+      "invalid_response": "Narwal Cloud returned incomplete device information.",
+      "reauth_successful": "Narwal Cloud was reconnected successfully.",
+      "reconfigure_successful": "Automatic Narwal account login is now enabled."
+    }
+  },
+  "options": {
+    "step": {
+      "init": {
+        "title": "Polling interval",
+        "description": "Choose how often Home Assistant requests the latest Narwal state. The default and minimum is 1 second. Increase it to reduce cloud and network traffic.",
+        "data": {
+          "scan_interval": "Polling interval (seconds)"
+        }
+      }
+    }
+  },
+  "services": {
+    "clean_rooms": {
+      "name": "Clean rooms",
+      "description": "Clean saved-map rooms by name, using the current cleaning mode settings.",
+      "fields": {
+        "rooms": {
+          "name": "Rooms",
+          "description": "Room names as shown in the Narwal app (case-insensitive), or room ids."
+        }
+      }
+    }
+  }
+}
