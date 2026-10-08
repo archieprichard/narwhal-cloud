@@ -7,6 +7,7 @@ logging or exceptions.
 from __future__ import annotations
 
 import asyncio
+import logging
 from collections.abc import Awaitable, Callable
 from typing import Any
 
@@ -32,6 +33,16 @@ from .protocol import (
     parse_display_map,
     parse_map_response,
 )
+_LOGGER = logging.getLogger(__name__)
+
+# (label, request body, send app-style wake burst first, timeout seconds)
+MAP_REQUEST_STRATEGIES: tuple[tuple[str, bytes, bool, int], ...] = (
+    ("app_body", b"\x08\x00\x10\x00", False, 20),
+    ("empty_body", b"", False, 20),
+    ("wake+app_body", b"\x08\x00\x10\x00", True, 60),
+    ("wake+empty_body", b"", True, 60),
+)
+
 from .region import (
     API_BASE_URL,
     BROKER_DISCOVERY_COUNTRY,
@@ -367,29 +378,23 @@ class NarwalCloudClient:
     async def async_get_map(
         self, device_id: str, product_id: str
     ) -> NarwalMap:
-        """Return the robot's current saved map and room metadata."""
+        """Return the robot's current saved map and room metadata.
+
+        Models differ in what wakes them and what request body they accept,
+        so try several known variants in order and keep the first map that
+        parses. ``b"\x08\x00\x10\x00"`` is the EU/YJCC012 app body; the
+        empty body is what the local (port 9002) integration uses and is
+        verified on the Freo Z Ultra (CX7).
+        """
         broker_url = await self.async_get_broker_url()
-        diagnostic: dict[str, Any] = {"status": "requesting"}
-        self.last_map_diagnostic = diagnostic
-        try:
-            # An already-online robot answers the focused request reliably and
-            # avoids activation broadcasts racing the map response.
-            async with asyncio.timeout(20):
-                payload = await async_request(
-                    broker_url,
-                    self.access_token,
-                    self.client_uuid,
-                    product_id,
-                    device_id,
-                    "map/get_map",
-                    b"\x08\x00\x10\x00",
-                    response_metadata=diagnostic,
-                )
-        except (NarwalMqttError, TimeoutError, ValueError):
+        attempts: list[dict[str, Any]] = []
+        self.last_map_diagnostic = {"status": "requesting", "attempts": attempts}
+        last_err: Exception | None = None
+        for label, body, activate, timeout in MAP_REQUEST_STRATEGIES:
+            diagnostic: dict[str, Any] = {"strategy": label}
+            attempts.append(diagnostic)
             try:
-                # Sleeping older Freo firmware needs the official app-style
-                # activation burst before it will answer the same request.
-                async with asyncio.timeout(60):
+                async with asyncio.timeout(timeout):
                     payload = await async_request(
                         broker_url,
                         self.access_token,
@@ -397,34 +402,48 @@ class NarwalCloudClient:
                         product_id,
                         device_id,
                         "map/get_map",
-                        b"\x08\x00\x10\x00",
-                        activate_robot=True,
+                        body,
+                        activate_robot=activate,
                         response_metadata=diagnostic,
                     )
-            except (NarwalMqttError, TimeoutError, ValueError) as retry_err:
+                map_data = parse_map_response(payload)
+            except (NarwalMqttError, TimeoutError, ValueError) as err:
+                last_err = err
                 diagnostic.update(
                     {
                         "status": "error",
-                        "error_type": type(retry_err).__name__,
-                        "error": str(retry_err)[:160] or "Request timed out",
+                        "error_type": type(err).__name__,
+                        "error": str(err)[:160] or "Request timed out",
                     }
                 )
-                raise NarwalCloudError(
-                    "Unable to read the Narwal map"
-                ) from retry_err
-        try:
-            map_data = parse_map_response(payload)
-        except ValueError as err:
-            diagnostic.update(
-                {
-                    "status": "error",
-                    "error_type": type(err).__name__,
-                    "error": str(err)[:160],
-                }
+                _LOGGER.debug(
+                    "Narwal map strategy %s failed: %s %s (topics seen: %s)",
+                    label,
+                    diagnostic["error_type"],
+                    diagnostic["error"],
+                    diagnostic.get("observed_topics", []),
+                )
+                continue
+            diagnostic["status"] = "ok"
+            self.last_map_diagnostic["status"] = "ok"
+            _LOGGER.debug(
+                "Narwal map read with strategy %s: %s rooms, %sx%s grid",
+                label,
+                len(map_data.rooms),
+                map_data.width,
+                map_data.height,
             )
-            raise NarwalCloudError("Unable to parse the Narwal map") from err
-        diagnostic["status"] = "ok"
-        return map_data
+            return map_data
+        self.last_map_diagnostic["status"] = "error"
+        _LOGGER.warning(
+            "Unable to read the Narwal map with any strategy: %s",
+            "; ".join(
+                f"{a['strategy']}={a.get('error_type')}"
+                f"({a.get('error')}) topics={a.get('observed_topics', [])}"
+                for a in attempts
+            ),
+        )
+        raise NarwalCloudError("Unable to read the Narwal map") from last_err
 
     async def async_get_clean_plans(
         self, device_id: str, product_id: str
