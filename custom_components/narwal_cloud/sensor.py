@@ -11,7 +11,7 @@ from homeassistant.components.sensor import (
     SensorStateClass,
 )
 from homeassistant.config_entries import ConfigEntry
-from homeassistant.const import PERCENTAGE, UnitOfTime
+from homeassistant.const import PERCENTAGE, UnitOfArea, UnitOfTime
 from homeassistant.core import HomeAssistant, callback
 from homeassistant.helpers.device_registry import DeviceInfo
 from homeassistant.helpers.entity_platform import AddEntitiesCallback
@@ -55,6 +55,11 @@ async def async_setup_entry(
             NarwalStatusSensor(coordinator, "movement_status"),
             NarwalStatusSensor(coordinator, "cleaning_status"),
             NarwalCurrentRoomSensor(coordinator),
+            NarwalCleaningRoomSensor(coordinator),
+            NarwalSessionSensor(coordinator, "cleaned_area"),
+            NarwalSessionSensor(coordinator, "cleaning_time"),
+            NarwalSessionSensor(coordinator, "cleaning_progress"),
+            NarwalSessionSensor(coordinator, "remaining_time"),
         ]
     )
     current_codes: set[str] = set()
@@ -299,3 +304,76 @@ class NarwalCurrentRoomSensor(
             "pose_updated_at": self.coordinator.map_data.robot_pose_update_time
             or None,
         }
+
+
+_SESSION_SENSORS: dict[str, tuple[str, Any, Any, Any]] = {
+    # key: (working_status field, unit, device class, state class)
+    "cleaned_area": ("area", UnitOfArea.SQUARE_METERS, SensorDeviceClass.AREA, SensorStateClass.MEASUREMENT),
+    "cleaning_time": ("elapsed", UnitOfTime.SECONDS, SensorDeviceClass.DURATION, SensorStateClass.MEASUREMENT),
+    "cleaning_progress": ("progress", PERCENTAGE, None, SensorStateClass.MEASUREMENT),
+    "remaining_time": ("remaining", UnitOfTime.SECONDS, SensorDeviceClass.DURATION, None),
+}
+
+
+class NarwalSessionSensor(
+    CoordinatorEntity[NarwalCloudCoordinator], SensorEntity
+):
+    """Current/last cleaning session metric from status/working_status."""
+
+    _attr_has_entity_name = True
+
+    def __init__(self, coordinator: NarwalCloudCoordinator, key: str) -> None:
+        super().__init__(coordinator)
+        self._field, unit, device_class, state_class = _SESSION_SENSORS[key]
+        self._attr_translation_key = key
+        self._attr_unique_id = f"{coordinator.device_id}_{key}"
+        self._attr_native_unit_of_measurement = unit
+        self._attr_device_class = device_class
+        self._attr_state_class = state_class
+        if key in ("cleaning_time", "remaining_time"):
+            self._attr_suggested_unit_of_measurement = UnitOfTime.MINUTES
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.device_id)},
+            manufacturer=NAME,
+        )
+
+    @property
+    def native_value(self) -> float | int | None:
+        return self.coordinator.client.last_working_status.get(self._field)
+
+
+class NarwalCleaningRoomSensor(
+    CoordinatorEntity[NarwalCloudCoordinator], SensorEntity
+):
+    """Room the robot reports it is cleaning (working_status cleaningZoneId)."""
+
+    _attr_has_entity_name = True
+    _attr_translation_key = "cleaning_room"
+
+    def __init__(self, coordinator: NarwalCloudCoordinator) -> None:
+        super().__init__(coordinator)
+        self._attr_unique_id = f"{coordinator.device_id}_cleaning_room"
+
+    @property
+    def device_info(self) -> DeviceInfo:
+        return DeviceInfo(
+            identifiers={(DOMAIN, self.coordinator.device_id)},
+            manufacturer=NAME,
+        )
+
+    @property
+    def native_value(self) -> str | None:
+        status = self.coordinator.data["status"] if self.coordinator.data else {}
+        if movement_status(status) != "cleaning":
+            return None
+        zone_id = self.coordinator.client.last_working_status.get("zone_id")
+        if not zone_id:
+            return None
+        room = next(
+            (r for r in self.coordinator.map_data.rooms if r.room_id == zone_id),
+            None,
+        )
+        return room.name if room is not None else None

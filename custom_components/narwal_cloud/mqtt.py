@@ -199,6 +199,9 @@ _BROADCAST_TOPIC_SUFFIXES = (
 )
 
 
+PASSIVE_TOPIC_SUFFIXES = frozenset({"status/working_status"})
+
+
 def _active_robot_body(duration: int = 600) -> bytes:
     """Ask the robot to publish every app broadcast for ``duration`` seconds."""
     return b"".join(
@@ -324,8 +327,26 @@ async def _async_request_sequence(
     capture_extra_payload: dict[str, bytes] | None = None,
     alternate_response_topic_suffix: str | None = None,
     response_metadata: dict[str, Any] | None = None,
+    passive_payloads: dict[str, bytes] | None = None,
 ) -> tuple[bytes, ...]:
-    """Publish requests in order over one MQTT session."""
+    """Publish requests in order over one MQTT session.
+
+    ``passive_payloads`` collects the latest payload of each broadcast topic
+    in ``PASSIVE_TOPIC_SUFFIXES`` seen while the session is open.
+    """
+    passive_prefix = f"/{product_id}/{device_id}/"
+
+    def _note_passive(packet_type: int, topic: str, packet: bytes) -> None:
+        if (
+            passive_payloads is not None
+            and packet_type == 3
+            and topic.startswith(passive_prefix)
+            and topic[len(passive_prefix):] in PASSIVE_TOPIC_SUFFIXES
+        ):
+            passive_payloads[topic[len(passive_prefix):]] = _mqtt_publish_payload(
+                packet
+            )
+
     parsed = urlparse(broker_url)
     host = parsed.hostname
     if not host:
@@ -496,6 +517,7 @@ async def _async_request_sequence(
                     if packet_type == 3
                     else ""
                 )
+                _note_passive(packet_type, actual_topic, response_packet)
                 if response_metadata is not None and actual_topic:
                     prefix = f"/{product_id}/{device_id}/"
                     observed_topic = (
@@ -549,6 +571,7 @@ async def _async_request_sequence(
                 actual_topic = (
                     _mqtt_publish_topic(packet) if packet_type == 3 else ""
                 )
+                _note_passive(packet_type, actual_topic, packet)
                 if (
                     extra_topic is not None
                     and actual_topic == extra_topic
@@ -582,6 +605,11 @@ async def _async_request_sequence(
                         )
                     except TimeoutError:
                         break
+                    _note_passive(
+                        packet_type,
+                        _mqtt_publish_topic(packet) if packet_type == 3 else "",
+                        packet,
+                    )
                     if (
                         packet_type == 3
                         and _mqtt_publish_topic(packet) == extra_topic
@@ -659,6 +687,7 @@ async def async_request_base_status(
     device_id: str,
     *,
     capture_display: bool = False,
+    passive_payloads: dict[str, bytes] | None = None,
 ) -> tuple[bytes, bytes | None]:
     """Capture base status and, while cleaning, the latest display map."""
     captured: dict[str, bytes] = {}
@@ -672,6 +701,7 @@ async def async_request_base_status(
         capture_topic_suffix="status/robot_base_status",
         capture_extra_topic_suffix="map/display_map" if capture_display else None,
         capture_extra_payload=captured,
+        passive_payloads=passive_payloads,
     )
     return responses[-1], captured.get("payload")
 

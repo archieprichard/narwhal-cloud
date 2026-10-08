@@ -1,5 +1,45 @@
 # Changelog
 
+## 0.13.0
+
+- New sensors from the robot's `status/working_status` broadcast: **Cleaned
+  area** (m²), **Cleaning time**, **Cleaning progress** (%), **Remaining
+  cleaning time**, and **Cleaning room** (the room the robot reports it is
+  cleaning, as opposed to Current room, which is where it physically is).
+- Values are for the current or most recent session and update whenever the
+  broadcast is seen during a status poll.
+
+## 0.12.2
+
+- `clean_rooms` suction now uses the Freo Z Ultra app's five tiers: `ai`,
+  `quiet`, `standard`, `strong`, `super_powerful` (FanLevel 0-4).
+
+## 0.12.1
+
+- `narwal_cloud.clean_rooms` accepts optional per-job `mode` (vacuum, mop,
+  vacuum_and_mop, vacuum_then_mop), `suction` (quiet, standard, strong) and
+  `passes` (1-3), overriding the device selects for that job only.
+
+## 0.12.0
+
+- Room cleaning no longer depends on Narwal's per-room templates. The robot
+  never answers the cloud template request on the Freo Z Ultra, so `auto` now
+  sends a direct `clean/start_clean` room task (the layout the local
+  integration verified on the CX7) unless a Freo Mind template is cached.
+- `narwal_cloud.clean_rooms` gains an optional `method`
+  (`auto` / `start_clean` / `easy_clean`).
+- Room cleans fail fast with a clear message instead of waiting minutes for a
+  template fetch; a "not docked" reply (code 4) is reported as such.
+
+## 0.11.1
+
+- Map retrieval now tries four request variants in order (app body, empty
+  body, then each again after the app-style wake burst) and keeps the first
+  map that parses. The empty body is the one the local integration uses on the
+  Freo Z Ultra (CX7).
+- Logs each failed map attempt at debug level, and one warning summarising all
+  attempts (error type and topics seen, no payloads) when every variant fails.
+
 ## 0.11.0 (US edition)
 
 - Forked from madsah211/ha-narwal-cloud-eu 0.10.1 and switched the API host,

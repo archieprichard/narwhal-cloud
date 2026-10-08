@@ -58,6 +58,21 @@
       },
       "current_room": {
         "name": "Nuværende rum"
+      },
+      "cleaning_room": {
+        "name": "Rum der rengøres"
+      },
+      "cleaned_area": {
+        "name": "Rengjort areal"
+      },
+      "cleaning_time": {
+        "name": "Rengøringstid"
+      },
+      "cleaning_progress": {
+        "name": "Rengøringsfremskridt"
+      },
+      "remaining_time": {
+        "name": "Resterende rengøringstid"
       }
     },
     "button": {

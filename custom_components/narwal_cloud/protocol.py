@@ -532,3 +532,45 @@ def parse_clean_plans_response(payload: bytes) -> tuple[NarwalCleanPlan, ...]:
             )
         )
     return tuple(plans)
+
+
+def parse_working_status(payload: bytes) -> dict[str, float | int | None]:
+    """Parse the ``status/working_status`` broadcast.
+
+    Field meanings come from the local integration's decoding of the
+    WorkingStatus proto: 1 workingProgress (float 0..1), 2 coveredArea
+    (float, m^2), 3 timeConsuming (s), 4 remainedTime (s), 6 cleaningZoneId.
+    Field 13 is a dock bag timer, not area (18000 was once misread as 1.8 m^2).
+    """
+    try:
+        fields = decode_fields(payload)
+    except ValueError:
+        _, body = unwrap_transport(payload)
+        fields = decode_fields(body)
+    if not any(item.number in (1, 2, 3, 4, 6) for item in fields):
+        raise ValueError("Narwal working status has no session fields")
+
+    def _float(number: int) -> float | None:
+        return _fixed32_float(fields, number) if _values(fields, number, 5) else None
+
+    def _int(number: int) -> int | None:
+        values = _values(fields, number, 0)
+        return int(values[-1]) if values else None
+
+    progress = _float(1)
+    area = _float(2)
+    return {
+        "progress": (
+            round(progress * 100)
+            if progress is not None and 0 <= progress <= 1
+            else None
+        ),
+        "area": (
+            round(area, 1)
+            if area is not None and 0 <= area < 10000
+            else None
+        ),
+        "elapsed": _int(3),
+        "remaining": _int(4),
+        "zone_id": _int(6),
+    }

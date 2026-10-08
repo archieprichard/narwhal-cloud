@@ -35,6 +35,7 @@ from .protocol import (
     _integer,
     decode_fields,
     parse_map_response,
+    parse_working_status,
     unwrap_transport,
 )
 from .region import (
@@ -87,6 +88,7 @@ class NarwalCloudClient:
         self._password = password
         self.last_map_diagnostic: dict[str, Any] = {"status": "not_attempted"}
         self.last_display_map: NarwalDisplayMap | None = None
+        self.last_working_status: dict[str, float | int | None] = {}
 
     @property
     def access_token(self) -> str:
@@ -289,6 +291,7 @@ class NarwalCloudClient:
         broker_url = await self.async_get_broker_url()
         if capture_display:
             self.last_display_map = None
+        passive: dict[str, bytes] = {}
         try:
             async with asyncio.timeout(20):
                 payload, display_payload = await async_request_base_status(
@@ -298,7 +301,17 @@ class NarwalCloudClient:
                     product_id,
                     device_id,
                     capture_display=capture_display,
+                    passive_payloads=passive,
                 )
+            working = passive.get("status/working_status")
+            if working is not None:
+                try:
+                    self.last_working_status = parse_working_status(working)
+                    _LOGGER.debug(
+                        "Narwal working_status: %s", self.last_working_status
+                    )
+                except ValueError:
+                    _LOGGER.debug("Unparseable Narwal working_status broadcast")
             if display_payload is not None:
                 try:
                     self.last_display_map = parse_display_map(display_payload)

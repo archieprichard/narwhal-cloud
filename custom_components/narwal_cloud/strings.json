@@ -58,6 +58,21 @@
       },
       "current_room": {
         "name": "Current room"
+      },
+      "cleaning_room": {
+        "name": "Cleaning room"
+      },
+      "cleaned_area": {
+        "name": "Cleaned area"
+      },
+      "cleaning_time": {
+        "name": "Cleaning time"
+      },
+      "cleaning_progress": {
+        "name": "Cleaning progress"
+      },
+      "remaining_time": {
+        "name": "Remaining cleaning time"
       }
     },
     "button": {
