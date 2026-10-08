@@ -183,6 +183,18 @@
         "method": {
           "name": "Method",
           "description": "auto: official template if cached, otherwise direct room task. start_clean: direct room task (Freo Z Ultra). easy_clean: EU app path."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Override the cleaning mode for this job (default: the Cleaning mode select)."
+        },
+        "suction": {
+          "name": "Suction",
+          "description": "Override suction for this job."
+        },
+        "passes": {
+          "name": "Passes",
+          "description": "Override the number of passes (1-3)."
         }
       }
     }

@@ -183,6 +183,18 @@
         "method": {
           "name": "Metode",
           "description": "auto, start_clean eller easy_clean."
+        },
+        "mode": {
+          "name": "Mode",
+          "description": "Override the cleaning mode for this job (default: the Cleaning mode select)."
+        },
+        "suction": {
+          "name": "Suction",
+          "description": "Override suction for this job."
+        },
+        "passes": {
+          "name": "Passes",
+          "description": "Override the number of passes (1-3)."
         }
       }
     }

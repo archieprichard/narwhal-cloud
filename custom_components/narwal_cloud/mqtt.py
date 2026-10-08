@@ -101,7 +101,7 @@ def start_clean_body(
     )
     param = (
         _protobuf_varint(1, param_mode)
-        + _protobuf_varint(2, max(1, min(suction, 4)))
+        + _protobuf_varint(2, max(0, min(suction, 4)))  # 0 = AI
         + _protobuf_varint(3, 1)
         + _protobuf_varint(4, max(1, min(humidity, 3)))
     )

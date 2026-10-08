@@ -35,6 +35,18 @@ from .select import (
 )
 
 
+# clean_rooms overrides -> integration option values (see select.py)
+SERVICE_MODES = {"vacuum": 2, "mop": 3, "vacuum_and_mop": 4, "vacuum_then_mop": 5}
+# CX7 app tiers: AI, Quiet, Standard, Strong, Super Powerful (FanLevel 0-4).
+SERVICE_SUCTION = {
+    "ai": 0,
+    "quiet": 1,
+    "standard": 2,
+    "strong": 3,
+    "super_powerful": 4,
+}
+
+
 async def async_setup_entry(
     hass: HomeAssistant,
     entry: ConfigEntry[NarwalCloudCoordinator],
@@ -50,6 +62,9 @@ async def async_setup_entry(
             vol.Optional("method", default="auto"): vol.In(
                 ["auto", "start_clean", "easy_clean"]
             ),
+            vol.Optional("mode"): vol.In(list(SERVICE_MODES)),
+            vol.Optional("suction"): vol.In(list(SERVICE_SUCTION)),
+            vol.Optional("passes"): vol.All(vol.Coerce(int), vol.Range(min=1, max=3)),
         },
         "async_clean_rooms_by_name",
     )
@@ -195,7 +210,13 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
         ]
 
     async def async_clean_segments(
-        self, segment_ids: list[str], method: str = "auto", **kwargs: Any
+        self,
+        segment_ids: list[str],
+        method: str = "auto",
+        mode: str | None = None,
+        suction: str | None = None,
+        passes: int | None = None,
+        **kwargs: Any,
     ) -> None:
         """Start cleaning only the selected map rooms.
 
@@ -218,14 +239,22 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
         if not room_ids:
             raise HomeAssistantError("No valid Narwal rooms were selected")
 
-        mode = self.coordinator.cleaning_mode
-        templates = self.coordinator.room_templates_for_mode(mode)
+        mode_value = (
+            SERVICE_MODES[mode] if mode else self.coordinator.cleaning_mode
+        )
+        suction_value = (
+            SERVICE_SUCTION[suction] if suction is not None else self.coordinator.suction_power
+        )
+        cycles_value = passes or self.coordinator.cleaning_cycles
+        templates = self.coordinator.room_templates_for_mode(mode_value)
         has_templates = all(room_id in templates for room_id in room_ids)
         if method == "auto":
-            method = "easy_clean" if mode == 1 and has_templates else "start_clean"
+            method = (
+                "easy_clean" if mode_value == 1 and has_templates else "start_clean"
+            )
 
         if method == "easy_clean":
-            if mode == 1 and not has_templates:
+            if mode_value == 1 and not has_templates:
                 raise HomeAssistantError(
                     "No Freo Mind room template is cached for these rooms; "
                     "use method start_clean or another cleaning mode"
@@ -235,10 +264,10 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
                 self.coordinator.product_id,
                 "easy_clean_start",
                 room_ids,
-                mode=mode,
-                suction=self.coordinator.suction_power,
+                mode=mode_value,
+                suction=suction_value,
                 humidity=self.coordinator.mop_humidity,
-                cycles=self.coordinator.cleaning_cycles,
+                cycles=cycles_value,
                 room_templates=templates,
             )
         else:
@@ -247,10 +276,10 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
                 self.coordinator.product_id,
                 room_ids,
                 self.coordinator.map_data.revision,
-                mode=mode,
-                suction=self.coordinator.suction_power,
+                mode=mode_value,
+                suction=suction_value,
                 humidity=self.coordinator.mop_humidity,
-                cycles=self.coordinator.cleaning_cycles,
+                cycles=cycles_value,
             )
             if code == 4:
                 raise HomeAssistantError(
@@ -263,7 +292,12 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
         await self.coordinator.async_request_refresh()
 
     async def async_clean_rooms_by_name(
-        self, rooms: list[str], method: str = "auto"
+        self,
+        rooms: list[str],
+        method: str = "auto",
+        mode: str | None = None,
+        suction: str | None = None,
+        passes: int | None = None,
     ) -> None:
         """Clean saved-map rooms given by name (case-insensitive) or id."""
         if not self.coordinator.map_data.rooms:
@@ -290,7 +324,9 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
             raise HomeAssistantError(
                 f"Unknown Narwal room(s): {', '.join(unknown)}. Known rooms: {known}"
             )
-        await self.async_clean_segments(segment_ids, method=method)
+        await self.async_clean_segments(
+            segment_ids, method=method, mode=mode, suction=suction, passes=passes
+        )
 
     async def async_stop(self, **kwargs: Any) -> None:
         """End the active Narwal task."""
