@@ -45,7 +45,12 @@ async def async_setup_entry(
     platform = entity_platform.async_get_current_platform()
     platform.async_register_entity_service(
         "clean_rooms",
-        {vol.Required("rooms"): vol.All(cv.ensure_list, [cv.string])},
+        {
+            vol.Required("rooms"): vol.All(cv.ensure_list, [cv.string]),
+            vol.Optional("method", default="auto"): vol.In(
+                ["auto", "start_clean", "easy_clean"]
+            ),
+        },
         "async_clean_rooms_by_name",
     )
 
@@ -190,9 +195,15 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
         ]
 
     async def async_clean_segments(
-        self, segment_ids: list[str], **kwargs: Any
+        self, segment_ids: list[str], method: str = "auto", **kwargs: Any
     ) -> None:
-        """Start cleaning only the selected map rooms."""
+        """Start cleaning only the selected map rooms.
+
+        ``auto`` uses the app's official room template (clean/easy_clean)
+        when one is cached for Freo Mind, and otherwise sends a direct
+        clean/start_clean room task, which needs no template. The direct
+        path is the one verified on the Freo Z Ultra (CX7).
+        """
         if not self.coordinator.map_data.rooms:
             await self.coordinator.async_refresh_rooms()
         available_ids = {room.room_id for room in self.coordinator.map_data.rooms}
@@ -205,24 +216,55 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
             if room_id in available_ids and room_id not in room_ids:
                 room_ids.append(room_id)
         if not room_ids:
-            raise ValueError("No valid Narwal rooms were selected")
-        room_templates = await self.coordinator.async_require_room_templates(
-            self.coordinator.cleaning_mode, room_ids
-        )
-        await self.coordinator.client.async_send_task_command(
-            self.coordinator.device_id,
-            self.coordinator.product_id,
-            "easy_clean_start",
-            room_ids,
-            mode=self.coordinator.cleaning_mode,
-            suction=self.coordinator.suction_power,
-            humidity=self.coordinator.mop_humidity,
-            cycles=self.coordinator.cleaning_cycles,
-            room_templates=room_templates,
-        )
+            raise HomeAssistantError("No valid Narwal rooms were selected")
+
+        mode = self.coordinator.cleaning_mode
+        templates = self.coordinator.room_templates_for_mode(mode)
+        has_templates = all(room_id in templates for room_id in room_ids)
+        if method == "auto":
+            method = "easy_clean" if mode == 1 and has_templates else "start_clean"
+
+        if method == "easy_clean":
+            if mode == 1 and not has_templates:
+                raise HomeAssistantError(
+                    "No Freo Mind room template is cached for these rooms; "
+                    "use method start_clean or another cleaning mode"
+                )
+            await self.coordinator.client.async_send_task_command(
+                self.coordinator.device_id,
+                self.coordinator.product_id,
+                "easy_clean_start",
+                room_ids,
+                mode=mode,
+                suction=self.coordinator.suction_power,
+                humidity=self.coordinator.mop_humidity,
+                cycles=self.coordinator.cleaning_cycles,
+                room_templates=templates,
+            )
+        else:
+            code = await self.coordinator.client.async_start_clean_rooms(
+                self.coordinator.device_id,
+                self.coordinator.product_id,
+                room_ids,
+                self.coordinator.map_data.revision,
+                mode=mode,
+                suction=self.coordinator.suction_power,
+                humidity=self.coordinator.mop_humidity,
+                cycles=self.coordinator.cleaning_cycles,
+            )
+            if code == 4:
+                raise HomeAssistantError(
+                    "Narwal refused the room clean: the robot must be on the dock"
+                )
+            if code is not None and code not in (0, 1, 6):
+                raise HomeAssistantError(
+                    f"Narwal refused the room clean (result code {code})"
+                )
         await self.coordinator.async_request_refresh()
 
-    async def async_clean_rooms_by_name(self, rooms: list[str]) -> None:
+    async def async_clean_rooms_by_name(
+        self, rooms: list[str], method: str = "auto"
+    ) -> None:
         """Clean saved-map rooms given by name (case-insensitive) or id."""
         if not self.coordinator.map_data.rooms:
             await self.coordinator.async_refresh_rooms()
@@ -248,7 +290,7 @@ class NarwalCloudVacuum(CoordinatorEntity[NarwalCloudCoordinator], StateVacuumEn
             raise HomeAssistantError(
                 f"Unknown Narwal room(s): {', '.join(unknown)}. Known rooms: {known}"
             )
-        await self.async_clean_segments(segment_ids)
+        await self.async_clean_segments(segment_ids, method=method)
 
     async def async_stop(self, **kwargs: Any) -> None:
         """End the active Narwal task."""

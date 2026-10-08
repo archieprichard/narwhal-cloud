@@ -10,3 +10,12 @@ clean_rooms:
       selector:
         text:
           multiple: true
+    method:
+      required: false
+      default: auto
+      selector:
+        select:
+          options:
+            - auto
+            - start_clean
+            - easy_clean

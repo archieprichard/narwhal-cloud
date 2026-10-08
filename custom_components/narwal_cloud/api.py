@@ -19,6 +19,7 @@ from .auth import (
 )
 from .const import CLIENT_APP_VERSION, CLIENT_APPLICATION_ID, CLIENT_VERSION_CODE
 from .mqtt import (
+    start_clean_body,
     NarwalMqttError,
     async_publish_task_command,
     async_request,
@@ -31,8 +32,18 @@ from .protocol import (
     parse_base_status_response,
     parse_clean_plans_response,
     parse_display_map,
+    _integer,
+    decode_fields,
     parse_map_response,
+    unwrap_transport,
 )
+from .region import (
+    API_BASE_URL,
+    BROKER_DISCOVERY_COUNTRY,
+    COUNTRY_CODE,
+    build_login_payload,
+)
+
 _LOGGER = logging.getLogger(__name__)
 
 # (label, request body, send app-style wake burst first, timeout seconds)
@@ -41,13 +52,6 @@ MAP_REQUEST_STRATEGIES: tuple[tuple[str, bytes, bool, int], ...] = (
     ("empty_body", b"", False, 20),
     ("wake+app_body", b"\x08\x00\x10\x00", True, 60),
     ("wake+empty_body", b"", True, 60),
-)
-
-from .region import (
-    API_BASE_URL,
-    BROKER_DISCOVERY_COUNTRY,
-    COUNTRY_CODE,
-    build_login_payload,
 )
 
 TokenUpdateCallback = Callable[[str, str], Awaitable[None]]
@@ -374,6 +378,62 @@ class NarwalCloudClient:
             )
         except NarwalMqttError as err:
             raise NarwalCloudError(str(err)) from err
+
+    async def async_start_clean_rooms(
+        self,
+        device_id: str,
+        product_id: str,
+        room_ids: list[int],
+        map_id: int,
+        *,
+        mode: int = 4,
+        suction: int = 2,
+        humidity: int = 2,
+        cycles: int = 1,
+    ) -> int | None:
+        """Start a room clean with clean/start_clean.
+
+        Returns the robot's result code (1 = accepted, 4 = not docked), or
+        None when the command was published but no reply arrived.
+        """
+        body = start_clean_body(
+            room_ids,
+            map_id,
+            mode=mode,
+            suction=suction,
+            humidity=humidity,
+            cycles=cycles,
+        )
+        broker_url = await self.async_get_broker_url()
+        diagnostic: dict[str, Any] = {}
+        try:
+            async with asyncio.timeout(20):
+                payload = await async_request(
+                    broker_url,
+                    self.access_token,
+                    self.client_uuid,
+                    product_id,
+                    device_id,
+                    "clean/start_clean",
+                    body,
+                    response_metadata=diagnostic,
+                )
+        except TimeoutError:
+            _LOGGER.warning(
+                "clean/start_clean was sent but no reply arrived (topics seen: %s)",
+                diagnostic.get("observed_topics", []),
+            )
+            return None
+        except NarwalMqttError as err:
+            raise NarwalCloudError(str(err)) from err
+        try:
+            _, response = unwrap_transport(payload)
+            code = _integer(decode_fields(response), 1)
+        except ValueError:
+            _LOGGER.debug("Unparseable clean/start_clean reply")
+            return None
+        _LOGGER.debug("clean/start_clean result code %s", code)
+        return code
 
     async def async_get_map(
         self, device_id: str, product_id: str

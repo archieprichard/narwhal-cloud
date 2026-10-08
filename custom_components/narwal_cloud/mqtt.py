@@ -64,6 +64,63 @@ def _task_payload(
     return b"\x01" + _varint(len(protobuf)) + protobuf + command_body
 
 
+# Integration cleaning mode -> (CleanTask.taskType / WorkMode,
+# CleanParam.mode, CleanParam pass-count tags). Values from the local
+# integration's live-validated CleanTask decoding (clean/start_clean),
+# which is the room-clean path verified on the Freo Z Ultra (CX7).
+# Freo Mind has no CleanTask equivalent; it falls back to vacuum-and-mop.
+_START_CLEAN_MODES: dict[int, tuple[int, int, tuple[int, ...]]] = {
+    1: (4, 4, (7,)),  # Freo Mind -> vacuum and mop
+    2: (1, 2, (5,)),  # vacuum
+    3: (2, 3, (6,)),  # mop
+    4: (4, 4, (7,)),  # vacuum and mop
+    5: (3, 5, (5, 6)),  # vacuum then mop
+}
+
+
+def start_clean_body(
+    room_ids: list[int],
+    map_id: int,
+    mode: int = 4,
+    suction: int = 2,
+    humidity: int = 2,
+    cycles: int = 1,
+) -> bytes:
+    """Build StartClean{1: CleanTask} for clean/start_clean.
+
+    CleanTask{1: map_id, 2: [CleanItem], 3: TaskOption{}, 5: taskType};
+    CleanItem{1: ZoneOption{1: 1 (room), 2: room_id}, 2: CleanParam, 3: order};
+    CleanParam{1: mode, 2: fan, 3: mop strength, 4: water, pass tags}.
+    """
+    if not room_ids:
+        raise ValueError("No Narwal rooms were selected")
+    if map_id <= 0:
+        raise ValueError("No active Narwal map id is available")
+    task_type, param_mode, pass_tags = _START_CLEAN_MODES.get(
+        mode, _START_CLEAN_MODES[4]
+    )
+    param = (
+        _protobuf_varint(1, param_mode)
+        + _protobuf_varint(2, max(1, min(suction, 4)))
+        + _protobuf_varint(3, 1)
+        + _protobuf_varint(4, max(1, min(humidity, 3)))
+    )
+    for tag in pass_tags:
+        param += _protobuf_varint(tag, max(1, min(cycles, 3)))
+    task = _protobuf_varint(1, map_id)
+    for order, room_id in enumerate(room_ids, start=1):
+        item = (
+            _protobuf_message(
+                1, _protobuf_varint(1, 1) + _protobuf_varint(2, room_id)
+            )
+            + _protobuf_message(2, param)
+            + _protobuf_varint(3, order)
+        )
+        task += _protobuf_message(2, item)
+    task += _protobuf_message(3, b"") + _protobuf_varint(5, task_type)
+    return _protobuf_message(1, task)
+
+
 def _easy_clean_body(
     room_ids: list[int],
     mode: int = 1,
