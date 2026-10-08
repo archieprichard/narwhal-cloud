@@ -1,5 +1,13 @@
 # Changelog
 
+## 0.14.0
+
+- New dock buttons: **Empty dustbin** (`supply/dust_gathering`), **Dry dust
+  bin** (`supply/dry_dust_bag`) and **Dry dock dust bag**
+  (`supply/dry_station_bag`), using the station commands from the local
+  integration. Sent without waiting for an acknowledgement; use **Finish mop
+  washing/drying** (`task/force_end`) to stop a running station task.
+
 ## 0.13.0
 
 - New sensors from the robot's `status/working_status` broadcast: **Cleaned

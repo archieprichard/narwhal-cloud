@@ -199,6 +199,12 @@ _BROADCAST_TOPIC_SUFFIXES = (
 )
 
 
+_DOCK_TOPICS = {
+    "empty_dustbin": "supply/dust_gathering",
+    "dry_dust_bin": "supply/dry_dust_bag",
+    "dry_dock_bag": "supply/dry_station_bag",
+}
+
 PASSIVE_TOPIC_SUFFIXES = frozenset({"status/working_status"})
 
 
@@ -731,6 +737,9 @@ async def async_publish_task_command(
         "recall",
         "wash_and_dry_mop",
         "finish_station",
+        "empty_dustbin",
+        "dry_dust_bin",
+        "dry_dock_bag",
     }:
         raise ValueError(f"Unsupported Narwal task action: {action}")
 
@@ -750,6 +759,10 @@ async def async_publish_task_command(
     elif action == "recall":
         topic_suffix = "supply/recall"
         command_body = b""
+    elif action in _DOCK_TOPICS:
+        # Station tasks verified on the local protocol (supply/*, empty body).
+        topic_suffix = _DOCK_TOPICS[action]
+        command_body = b""
     elif action == "wash_and_dry_mop":
         topic_suffix = "supply/wash_and_dry_mop"
         command_body = b""
@@ -767,5 +780,9 @@ async def async_publish_task_command(
         device_id,
         topic_suffix,
         command_body,
-        response_required=response_required and action != "finish_station",
+        response_required=(
+            response_required
+            and action != "finish_station"
+            and action not in _DOCK_TOPICS
+        ),
     )

@@ -24,6 +24,9 @@ async def async_setup_entry(
         [
             NarwalDockButton(coordinator, "wash_and_dry_mop"),
             NarwalDockButton(coordinator, "finish_station"),
+            NarwalDockButton(coordinator, "empty_dustbin"),
+            NarwalDockButton(coordinator, "dry_dust_bin"),
+            NarwalDockButton(coordinator, "dry_dock_bag"),
         ]
     )
 

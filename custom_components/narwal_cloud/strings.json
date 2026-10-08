@@ -81,6 +81,15 @@
       },
       "finish_station": {
         "name": "Finish mop washing/drying"
+      },
+      "empty_dustbin": {
+        "name": "Empty dustbin"
+      },
+      "dry_dust_bin": {
+        "name": "Dry dust bin"
+      },
+      "dry_dock_bag": {
+        "name": "Dry dock dust bag"
       }
     },
     "select": {

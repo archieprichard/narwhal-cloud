@@ -81,6 +81,15 @@
       },
       "finish_station": {
         "name": "Afslut moppevask/-tørring"
+      },
+      "empty_dustbin": {
+        "name": "Tøm støvbeholder"
+      },
+      "dry_dust_bin": {
+        "name": "Tør støvbeholder"
+      },
+      "dry_dock_bag": {
+        "name": "Tør stationens støvpose"
       }
     },
     "select": {
